@@ -1,39 +1,44 @@
 from pathlib import Path
 import logging
 import aiofiles
-import asyncio
+import re
 from ignore import Ignore
+from git import *
 
 class TodoHandler:
-    def __init__(self, repo_path: Path):
+    def __init__(self, git :Git, repo_path: Path):
         self.repo_path = repo_path
         self.logger = logging.getLogger(__name__)
+        self.git = git
 
-    async def read_file(self, file_path):
+    async def handle_file(self, file_path) -> None:
         try:
+            todos = {}
+            todo_pattern = re.compile(r'TODO:\s*\[(.*?)\]\s*-\s*\[(.*?)\]')
             async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
-                return file_path, await file.read()
+                async for line in file:
+                    match = todo_pattern.search(line)
+                    if match:
+                        title = match.group(1).strip()
+                        body = match.group(2).strip()
+                        todos[title] = body  
+
+            for title, body in todos.items():  
+                self.logger.info(f"Creating new issue for file: {file_path.name} with title: {title}")
+                self.git.create_issue(title, body)  
         except UnicodeDecodeError as e:
             self.logger.error(f"Failed to decode {file_path}: {e}")
-            return file_path, None 
-    
-    async def fetch_files(self):
-        tasks = []
-        ignore = Ignore()
 
+    async def fetch_files(self):
         for file_path in self.repo_path.rglob('*'):
-            if '.git' in str(file_path):
+            if (file_path.is_dir()):
+                continue
+
+            if '.git' in str(file_path) or str(file_path).endswith('.git'):
                 continue
             
-            if ignore.is_ignored(file_path):
+            if Ignore.is_file_ignored(file_path):
                 continue
 
             if file_path.is_file():
-                tasks.append(self.read_file(file_path))
-
-        results = await asyncio.gather(*tasks) 
-        for content in results:
-            if content is not None:
-                print(f"Contents of file: {content[1]}")
-            else:
-                print("Could not read a file due to encoding issues.")
+                await self.handle_file(file_path)
