@@ -1,0 +1,44 @@
+import logging
+import sys
+from pathlib import Path
+from git_handler import GitHandler
+from config_handler import ConfigHandler
+from todo_handler import TodoHandler
+import asyncio
+
+def setup_logging() -> None:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+def get_repo_path() -> Path:
+    if len(sys.argv) != 2:
+        raise ValueError("Usage: python3 main.py <path-to-git-project>")
+    return Path(sys.argv[1]).expanduser()
+
+async def initialize_handlers(repo_path: Path) -> tuple[GitHandler, TodoHandler]:
+    git_handler = GitHandler(repo_path)
+    if not git_handler.is_valid_repo():
+        raise ValueError(f"The git repository directory '{repo_path}' was not found.")
+
+    config_handler = ConfigHandler('config.json')
+    config = config_handler.load_config()
+    if config is None:
+        raise ValueError("Failed to load or create configuration.")
+    
+    todo_handler = TodoHandler(repo_path)
+    return git_handler, todo_handler
+
+async def main() -> None:
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    try:
+        repo_path = get_repo_path()
+        git_handler, todo_handler = await initialize_handlers(repo_path)
+
+        await todo_handler.fetch_files()
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    asyncio.run(main())
