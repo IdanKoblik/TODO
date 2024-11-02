@@ -31,8 +31,6 @@ async def main() -> None:
     setup_logging()
     logger = logging.getLogger(__name__)
 
-    #TODO: [test] - [test]  (https://github.com/IdanKoblik/TODO/issues/33)
-
     try:
         repo_path = get_repo_path()
         git_handler, config_handler, todo_handler = await initialize_handlers(repo_path)
